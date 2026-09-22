@@ -1,0 +1,37 @@
+# GitLab CI equivalent of .github/workflows/ci.yml
+#
+# One-time setup in the GitLab project:
+#   1. Settings > Access tokens: create a project access token with the
+#      "write_repository" scope (role: Maintainer). Copy it.
+#   2. Settings > CI/CD > Variables: add GITLAB_PUSH_TOKEN = <that token>
+#      (masked, protected off so scheduled pipelines can read it).
+#   3. Build > Pipeline schedules: new schedule, cron "*/10 * * * *",
+#      target branch main.
+#
+# The job only runs from a schedule or a manual "Run pipeline" so ordinary
+# pushes do not append log entries.
+
+stages:
+  - deploy
+
+pages:
+  stage: deploy
+  image: alpine:latest
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+    - if: $CI_PIPELINE_SOURCE == "web"
+  before_script:
+    - apk add --no-cache bash git
+  script:
+    - bash ./update.sh
+    - git config user.name "gitlab-ci"
+    - git config user.email "gitlab-ci@users.noreply.gitlab.com"
+    - git add index.html
+    - git commit -m "chore: log update $(date -u +'%Y-%m-%d %H:%M:%S UTC')"
+    # -o ci.skip stops this push from triggering another pipeline.
+    - git push "https://oauth2:${GITLAB_PUSH_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git" "HEAD:${CI_COMMIT_REF_NAME}" -o ci.skip
+    - mkdir -p public
+    - cp index.html public/
+  artifacts:
+    paths:
+      - public
